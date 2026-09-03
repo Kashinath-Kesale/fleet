@@ -68,4 +68,20 @@ export class RobotsService implements OnModuleInit {
     getRobot(robotId: string): RobotState | undefined {
         return this.robots.get(robotId);
     }
+
+    isRobotStale(robot: RobotState): boolean {
+        const STALE_THRESHOLD_MS = 15000;
+
+        return Date.now() - robot.lastSeen > STALE_THRESHOLD_MS;
+    }
+
+    getAttentionRobots(): RobotState[] {
+        return this.getAllRobots().filter((robot) => {
+            return (
+                this.isRobotStale(robot) ||
+                robot.battery < 20 ||
+                ['blocked', 'error', 'maintenance'].includes(robot.status)
+            );
+        });
+    }
 }

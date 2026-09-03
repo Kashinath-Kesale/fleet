@@ -10,6 +10,11 @@ export class RobotsController {
     getAllRobots() {
         return this.robotsService.getAllRobots();
     }
+    
+    @Get('attention')
+    getAttentionRobots() {
+        return this.robotsService.getAttentionRobots();
+    }
 
     @Get(':robotId')
     getRobot(@Param('robotId') robotId: string) {
