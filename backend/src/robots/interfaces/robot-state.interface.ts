@@ -17,4 +17,5 @@ export interface RobotState {
     battery: number;
     status: RobotStatus;
     lastSeen: number;
+    sequence: number;
 }

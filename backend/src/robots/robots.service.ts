@@ -29,6 +29,7 @@ export class RobotsService implements OnModuleInit {
                 battery: 100,
                 status: 'idle',
                 lastSeen: Date.now(),
+                sequence: 0,
             });
         }
     }
@@ -39,6 +40,8 @@ export class RobotsService implements OnModuleInit {
 
         if (!existing) throw new Error(`Unknown robot: ${update.robot_id}`);
 
+        if (update.sequence <= existing.sequence) return existing;
+
         const updated: RobotState = {
             ...existing,
             x: update.x,
@@ -46,11 +49,16 @@ export class RobotsService implements OnModuleInit {
             battery: update.battery,
             status: update.status as RobotState['status'],
             lastSeen: Date.now(),
+            sequence: update.sequence,
         };
 
         this.robots.set(update.robot_id, updated);
 
         return updated;
+    }
+
+    processUpdates(updates: RobotUpdateDto[]): RobotState[] {
+        return updates.map((update) => this.updateRobot(update));
     }
 
     getAllRobots(): RobotState[] {

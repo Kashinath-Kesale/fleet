@@ -18,4 +18,7 @@ export class RobotUpdateDto {
     @IsString()
     @IsIn(["idle", "active", "on_mission", "charging", "blocked", "error", "maintenance", "offline"])
     status: string;
+
+    @IsNumber()
+    sequence: number;
 }
