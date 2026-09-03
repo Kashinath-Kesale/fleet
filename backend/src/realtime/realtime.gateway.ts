@@ -1,9 +1,17 @@
-import { SubscribeMessage, WebSocketGateway } from '@nestjs/websockets';
+import { WebSocketGateway, WebSocketServer } from "@nestjs/websockets";
+import { Server } from "socket.io";
 
-@WebSocketGateway()
+@WebSocketGateway({
+  cors: {
+    origin: '*',
+  },
+})
+
 export class RealtimeGateway {
-  @SubscribeMessage('message')
-  handleMessage(client: any, payload: any): string {
-    return 'Hello world!';
+  @WebSocketServer()
+  server: Server;
+
+  broadcastRobotUpdate(robot: unknown): void {
+    this.server.emit('robot:update', robot);
   }
 }

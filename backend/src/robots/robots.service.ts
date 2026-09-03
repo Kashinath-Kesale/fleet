@@ -1,15 +1,17 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { lstatSync, readFileSync } from 'fs';
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { readFileSync } from 'fs';
 import { join } from 'path';
 import { RobotState } from './interfaces/robot-state.interface';
 import { RobotRoster } from './interfaces/robot-roster.interface';
 import { RobotUpdateDto } from './dto/robot-update.dto';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 
 @Injectable()
 export class RobotsService implements OnModuleInit {
     private readonly robots = new Map<string, RobotState>();
 
+    constructor(private readonly realtimeGateway: RealtimeGateway){}
     onModuleInit(): void {
         this.loadRobots();
     }
@@ -53,6 +55,7 @@ export class RobotsService implements OnModuleInit {
         };
 
         this.robots.set(update.robot_id, updated);
+        this.realtimeGateway.broadcastRobotUpdate(updated);
 
         return updated;
     }
