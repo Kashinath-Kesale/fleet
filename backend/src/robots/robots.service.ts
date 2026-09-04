@@ -41,7 +41,7 @@ export class RobotsService implements OnModuleInit {
         const existing = this.robots.get(update.robot_id);
 
         if (!existing) {
-            const robotNumber = parseInt(update.robot_id.replace('/\D/g', ''), 10) ||
+            const robotNumber = parseInt(update.robot_id.replace(/\D/g, ''), 10) ||
                                 this.robots.size + 1;
 
 
@@ -106,5 +106,15 @@ export class RobotsService implements OnModuleInit {
                 ['blocked', 'error', 'maintenance'].includes(robot.status)
             );
         });
+    }
+
+    syncActiveFleet(activeRobotIds: string[]): void {
+        const activeSet = new Set(activeRobotIds);
+        for (const id of this.robots.keys()) {
+            if (!activeSet.has(id)) {
+                this.robots.delete(id);
+            }
+        }
+        this.realtimeGateway.broadcastFleetSync(this.getAllRobots());
     }
 }

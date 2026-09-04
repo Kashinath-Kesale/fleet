@@ -41,7 +41,16 @@ function App() {
   const [search, setSearch] = useState('');
   const [showAttentionOnly, setShowAttentionOnly] = useState(false);
   const [selectedRobot, setSelectedRobot] = useState<Robot | null>(null);
-  
+
+  const [configFleetSize, setConfigFleetSize] = useState<number>(12);
+  const [configInterval, setConfigInterval] = useState<number>(2000);
+  const [configPayloadSize, setConfigPayloadSize] = useState<number>(0);
+  const [adminKey, setAdminKey] = useState<string>(
+    () => sessionStorage.getItem('fleet_admin_key') || '',
+  );
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [configSavedMsg, setConfigSavedMsg] = useState('');
+  const [configErrorMsg, setConfigErrorMsg] = useState('');
 
   useEffect(() => {
     fetch('http://localhost:3000/robots')
@@ -56,6 +65,15 @@ function App() {
       })
       .catch((err) => console.error('Failed to fetch initial robots:', err));
 
+    fetch('http://localhost:3000/simulator/config')
+      .then((res) => res.json())
+      .then((cfg) => {
+        if (cfg.fleetSize !== undefined) setConfigFleetSize(cfg.fleetSize);
+        if (cfg.updateInterval !== undefined) setConfigInterval(cfg.updateInterval);
+        if (cfg.payloadSize !== undefined) setConfigPayloadSize(cfg.payloadSize);
+      })
+      .catch((err) => console.error('Failed to fetch simulator config:', err));
+
     const socket = io('http://localhost:3000');
 
     socket.on('connect', () => {
@@ -64,6 +82,10 @@ function App() {
 
     socket.on('disconnect', () => {
       setConnected(false);
+    });
+
+    socket.on('fleet:sync', (activeRobots: Robot[]) => {
+      setRobots(activeRobots);
     });
 
     socket.on('robot:update', (updatedRobot: Robot) => {
@@ -122,14 +144,62 @@ function App() {
   const attentionCount = robots.filter(isRobotAttention).length;
 
   const filteredRobots = robots.filter((robot) => {
-    const matchesSearch = robot.robot_id
-      .toLowerCase()
-      .includes(search.toLowerCase());
+    const q = search.trim().toLowerCase();
+    const id = robot.robot_id.toLowerCase();
+
+    let matchesSearch = true;
+    if (q) {
+      if (id === q || id === `r${q}`) {
+        matchesSearch = true;
+      } else if (q === 'r') {
+        matchesSearch = true;
+      } else {
+        matchesSearch = false;
+      }
+    }
 
     const needsAttention = isRobotAttention(robot);
 
     return matchesSearch && (!showAttentionOnly || needsAttention);
   });
+
+  const handleSaveConfig = async () => {
+    setIsSavingConfig(true);
+    setConfigSavedMsg('');
+    setConfigErrorMsg('');
+    try {
+      const res = await fetch('http://localhost:3000/simulator/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminKey}`,
+          'x-admin-key': adminKey,
+        },
+        body: JSON.stringify({
+          fleetSize: configFleetSize,
+          updateInterval: configInterval,
+          payloadSize: configPayloadSize,
+        }),
+      });
+      if (res.ok) {
+        sessionStorage.setItem('fleet_admin_key', adminKey);
+        setConfigSavedMsg('Config applied!');
+        setTimeout(() => setConfigSavedMsg(''), 3000);
+        const robotsRes = await fetch('http://localhost:3000/robots');
+        const updatedRobots = await robotsRes.json();
+        setRobots(updatedRobots);
+      } else if (res.status === 401) {
+        setConfigErrorMsg('Unauthorized: Invalid Admin Key');
+      } else {
+        setConfigErrorMsg(`Failed: ${res.statusText}`);
+      }
+    } catch (err) {
+      console.error('Failed to update simulator config:', err);
+      setConfigErrorMsg('Network connection error');
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
 
   return (
     <div className="dashboard">
@@ -174,256 +244,376 @@ function App() {
         </div>
       </section>
 
-      <section className="robot-controls">
-        <input
-          type="text"
-          placeholder="Search robot ID..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-
-        <button
-          className={!showAttentionOnly ? 'active-filter' : ''}
-          onClick={() => setShowAttentionOnly(false)}
-        >
-          All Robots
-        </button>
-
-        <button
-          className={showAttentionOnly ? 'active-filter' : ''}
-          onClick={() => setShowAttentionOnly(true)}
-        >
-          Needs Attention
-        </button>
-      </section>
-
-      <section className="trend-section">
-        <div className="trend-header">
-          <div>
-            <h2>Fleet Activity Trend</h2>
-            <p>Percentage of robots active or on mission</p>
+      {/* Main 2-Column Grid: Map on Left, Control/Details/Trend on Right */}
+      <div className="dashboard-grid">
+        {/* Left Column: Warehouse Map */}
+        <section className="map-section">
+          <div className="map-header">
+            <div>
+              <h2>Warehouse Site Map</h2>
+              <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
+                900m × 560m Live Operational View
+              </p>
+            </div>
+            <span className="live-badge">Live Moving</span>
           </div>
 
-          <div className="trend-controls">
-            {(Object.keys(TREND_WINDOWS) as Array<keyof typeof TREND_WINDOWS>).map(
-              (window) => (
-                <button
-                  key={window}
-                  className={trendWindow === window ? 'selected' : ''}
-                  onClick={() => setTrendWindow(window)}
-                >
-                  {window}
-                </button>
-              ),
-            )}
-          </div>
-        </div>
-
-        <div className="trend-chart">
-          {(() => {
-  const now = Date.now();
-  const cutoff = now - TREND_WINDOWS[trendWindow];
-
-  const points = trend.filter((point) => point.time >= cutoff);
-
-  if (points.length < 2) {
-    return <div className="trend-empty">Collecting trend data...</div>;
-  }
-
-  const width = 800;
-  const height = 220;
-  const padding = 30;
-
-  const minTime = points[0].time;
-  const maxTime = points[points.length - 1].time;
-
-  const getX = (time: number) =>
-    padding +
-    ((time - minTime) / Math.max(maxTime - minTime, 1)) *
-      (width - padding * 2);
-
-  const getY = (value: number) =>
-    height -
-    padding -
-    (value / 100) * (height - padding * 2);
-
-  const path = points
-    .map(
-      (point, index) =>
-        `${index === 0 ? 'M' : 'L'} ${getX(point.time)} ${getY(point.value)}`,
-    )
-    .join(' ');
-
-  return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      className="trend-svg"
-      preserveAspectRatio="none"
-    >
-      {/* Grid lines */}
-      {[0, 25, 50, 75, 100].map((value) => (
-        <line
-          key={value}
-          x1={padding}
-          x2={width - padding}
-          y1={getY(value)}
-          y2={getY(value)}
-          className="trend-grid"
-        />
-      ))}
-
-      {/* Y-axis labels */}
-      {[0, 25, 50, 75, 100].map((value) => (
-        <text
-          key={value}
-          x="5"
-          y={getY(value) + 4}
-          className="trend-label"
-        >
-          {value}%
-        </text>
-      ))}
-
-      {/* Trend line */}
-      <path
-        d={path}
-        className="trend-line"
-        fill="none"
-      />
-
-      {/* Current value */}
-      <text
-        x={width - padding}
-        y={25}
-        textAnchor="end"
-        className="trend-current"
-      >
-        {points[points.length - 1].value.toFixed(1)}%
-      </text>
-    </svg>
-  );
-})()}
-          {trend.length >= 0 && null}
-        </div>
-      </section>
-
-      <section className="map-section">
-        <div className="map-header">
-          <h2>Site Map (900m × 560m)</h2>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            Real-time Live Movement
-          </span>
-        </div>
-
-        <div className="map-wrapper">
-          <div className="site-map">
-            {OBSTACLES.map((obs, idx) => (
-              <div
-                key={idx}
-                className="obstacle"
-                style={{
-                  left: `${(obs.x / 900) * 100}%`,
-                  top: `${(obs.y / 560) * 100}%`,
-                  width: `${(obs.width / 900) * 100}%`,
-                  height: `${(obs.height / 560) * 100}%`,
-                }}
-              />
-            ))}
-
-            {filteredRobots.map((robot) => {
-              const needsAttention = isRobotAttention(robot);
-              const isSelected = selectedRobot?.robot_id === robot.robot_id;
-
-              return (
+          <div className="map-wrapper">
+            <div className="site-map">
+              {OBSTACLES.map((obs, idx) => (
                 <div
-                  key={robot.robot_id}
-                  className={`robot ${needsAttention ? 'attention' : robot.status} ${isSelected ? 'selected-robot' : ''}`}
+                  key={idx}
+                  className="obstacle"
                   style={{
-                    left: `${(robot.x / 900) * 100}%`,
-                    top: `${(robot.y / 560) * 100}%`,
+                    left: `${(obs.x / 900) * 100}%`,
+                    top: `${(obs.y / 560) * 100}%`,
+                    width: `${(obs.width / 900) * 100}%`,
+                    height: `${(obs.height / 560) * 100}%`,
                   }}
-                  onClick={() => setSelectedRobot(robot)}
-                  title={`${robot.robot_id} (${robot.robot_type}) | Battery: ${robot.battery}% | Status: ${robot.status}`}
-                >
-                  <span className="robot-id-tag">{robot.robot_id}</span>
-                </div>
-              );
-            })}
+                />
+              ))}
+
+              {filteredRobots.map((robot) => {
+                const needsAttention = isRobotAttention(robot);
+                const isSelected = selectedRobot?.robot_id === robot.robot_id;
+
+                return (
+                  <div
+                    key={robot.robot_id}
+                    className={`robot ${needsAttention ? 'attention' : robot.status} ${isSelected ? 'selected-robot' : ''}`}
+                    style={{
+                      left: `${(robot.x / 900) * 100}%`,
+                      top: `${(robot.y / 560) * 100}%`,
+                    }}
+                    onClick={() => setSelectedRobot(robot)}
+                    title={`${robot.robot_id} (${robot.robot_type}) | Battery: ${robot.battery}% | Status: ${robot.status}`}
+                  >
+                    <span className="robot-id-tag">{robot.robot_id}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {selectedRobot &&
-        (() => {
-          const currentRobot = robots.find(
-            (robot) => robot.robot_id === selectedRobot.robot_id,
-          );
+        {/* Right Column: Search, Robot Details, and Activity Trend */}
+        <div className="sidebar-column">
+          {/* 1. Search & Filter Card */}
+          <section className="sidebar-card">
+            <div className="sidebar-card-header">
+              <h3>Search & Filter</h3>
+            </div>
+            <div className="sidebar-controls">
+              <input
+                type="text"
+                placeholder="Search robot ID (e.g. r1)..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <div className="sidebar-filter-buttons">
+                <button
+                  className={!showAttentionOnly ? 'active-filter' : ''}
+                  onClick={() => setShowAttentionOnly(false)}
+                >
+                  All ({robots.length})
+                </button>
+                <button
+                  className={showAttentionOnly ? 'active-filter' : ''}
+                  onClick={() => setShowAttentionOnly(true)}
+                >
+                  Attention ({attentionCount})
+                </button>
+              </div>
+            </div>
+          </section>
 
-          if (!currentRobot) return null;
-
-          return (
-            <section className="robot-details">
-              <div className="details-header">
-                <h2>Robot Details ({currentRobot.robot_id})</h2>
+          {/* 2. Selected Robot Details Card */}
+          <section className="sidebar-card">
+            <div className="sidebar-card-header">
+              <h3>
+                {selectedRobot
+                  ? `Robot Details (${selectedRobot.robot_id})`
+                  : 'Robot Details'}
+              </h3>
+              {selectedRobot && (
                 <button
                   className="close-details-btn"
                   onClick={() => setSelectedRobot(null)}
                 >
                   ✕
                 </button>
+              )}
+            </div>
+
+            {selectedRobot ? (
+              (() => {
+                const currentRobot = robots.find(
+                  (robot) => robot.robot_id === selectedRobot.robot_id,
+                );
+
+                if (!currentRobot) return null;
+
+                return (
+                  <div className="sidebar-details-grid">
+                    <div className="detail-item">
+                      <span>Robot ID</span>
+                      <strong>{currentRobot.robot_id}</strong>
+                    </div>
+
+                    <div className="detail-item">
+                      <span>Type</span>
+                      <strong style={{ textTransform: 'capitalize' }}>
+                        {currentRobot.robot_type}
+                      </strong>
+                    </div>
+
+                    <div className="detail-item">
+                      <span>Status</span>
+                      <strong style={{ textTransform: 'capitalize' }}>
+                        {currentRobot.status}
+                      </strong>
+                    </div>
+
+                    <div className="detail-item">
+                      <span>Battery</span>
+                      <strong
+                        style={{
+                          color:
+                            currentRobot.battery < 20
+                              ? '#ef4444'
+                              : currentRobot.battery < 50
+                              ? '#f59e0b'
+                              : '#10b981',
+                        }}
+                      >
+                        {currentRobot.battery.toFixed(1)}%
+                      </strong>
+                    </div>
+
+                    <div className="detail-item">
+                      <span>Position</span>
+                      <strong>
+                        ({currentRobot.x.toFixed(1)}, {currentRobot.y.toFixed(1)})
+                      </strong>
+                    </div>
+
+                    <div className="detail-item">
+                      <span>Sequence</span>
+                      <strong>#{currentRobot.sequence}</strong>
+                    </div>
+                  </div>
+                );
+              })()
+            ) : (
+              <div className="sidebar-placeholder">
+                <span>Click any robot on the map to inspect live telemetry</span>
+              </div>
+            )}
+          </section>
+
+          {/* 3. Trend Chart Card */}
+          <section className="sidebar-card">
+            <div className="sidebar-card-header">
+              <div>
+                <h3>Fleet Trend</h3>
+                <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-muted)' }}>
+                  Active or on mission %
+                </p>
               </div>
 
-              <div className="details-grid">
-                <div className="detail-item">
-                  <span>Robot ID</span>
-                  <strong>{currentRobot.robot_id}</strong>
-                </div>
+              <div className="trend-controls">
+                {(Object.keys(TREND_WINDOWS) as Array<keyof typeof TREND_WINDOWS>).map(
+                  (window) => (
+                    <button
+                      key={window}
+                      className={trendWindow === window ? 'selected' : ''}
+                      onClick={() => setTrendWindow(window)}
+                    >
+                      {window}
+                    </button>
+                  ),
+                )}
+              </div>
+            </div>
 
-                <div className="detail-item">
-                  <span>Type</span>
-                  <strong style={{ textTransform: 'capitalize' }}>
-                    {currentRobot.robot_type}
-                  </strong>
-                </div>
+            <div className="trend-chart-compact">
+              {(() => {
+                const now = Date.now();
+                const cutoff = now - TREND_WINDOWS[trendWindow];
 
-                <div className="detail-item">
-                  <span>Status</span>
-                  <strong style={{ textTransform: 'capitalize' }}>
-                    {currentRobot.status}
-                  </strong>
-                </div>
+                const points = trend.filter((point) => point.time >= cutoff);
 
-                <div className="detail-item">
-                  <span>Battery</span>
-                  <strong
-                    style={{
-                      color:
-                        currentRobot.battery < 20
-                          ? '#ef4444'
-                          : currentRobot.battery < 50
-                          ? '#f59e0b'
-                          : '#10b981',
-                    }}
+                if (points.length < 2) {
+                  return <div className="trend-empty">Collecting trend data...</div>;
+                }
+
+                const width = 400;
+                const height = 130;
+                const padding = 24;
+
+                const minTime = points[0].time;
+                const maxTime = points[points.length - 1].time;
+
+                const getX = (time: number) =>
+                  padding +
+                  ((time - minTime) / Math.max(maxTime - minTime, 1)) *
+                    (width - padding * 2);
+
+                const getY = (value: number) =>
+                  height -
+                  padding -
+                  (value / 100) * (height - padding * 2);
+
+                const path = points
+                  .map(
+                    (point, index) =>
+                      `${index === 0 ? 'M' : 'L'} ${getX(point.time)} ${getY(point.value)}`,
+                  )
+                  .join(' ');
+
+                return (
+                  <svg
+                    viewBox={`0 0 ${width} ${height}`}
+                    className="trend-svg"
+                    preserveAspectRatio="none"
                   >
-                    {currentRobot.battery.toFixed(1)}%
-                  </strong>
-                </div>
+                    {[0, 50, 100].map((value) => (
+                      <line
+                        key={value}
+                        x1={padding}
+                        x2={width - padding}
+                        y1={getY(value)}
+                        y2={getY(value)}
+                        className="trend-grid"
+                      />
+                    ))}
 
-                <div className="detail-item">
-                  <span>Position</span>
-                  <strong>
-                    ({currentRobot.x.toFixed(1)}, {currentRobot.y.toFixed(1)})
-                  </strong>
-                </div>
+                    {[0, 50, 100].map((value) => (
+                      <text
+                        key={value}
+                        x="2"
+                        y={getY(value) + 4}
+                        className="trend-label"
+                      >
+                        {value}%
+                      </text>
+                    ))}
 
-                <div className="detail-item">
-                  <span>Last Sequence</span>
-                  <strong>#{currentRobot.sequence}</strong>
+                    <path
+                      d={path}
+                      className="trend-line"
+                      fill="none"
+                    />
+
+                    <text
+                      x={width - padding}
+                      y={18}
+                      textAnchor="end"
+                      className="trend-current"
+                    >
+                      {points[points.length - 1].value.toFixed(1)}%
+                    </text>
+                  </svg>
+                );
+              })()}
+              {trend.length >= 0 && null}
+            </div>
+          </section>
+
+          {/* 4. Simulator Controls Card */}
+          <section className="sidebar-card">
+            <div className="sidebar-card-header">
+              <h3>Simulator Controls</h3>
+              {configSavedMsg && (
+                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>
+                  {configSavedMsg}
+                </span>
+              )}
+              {configErrorMsg && (
+                <span style={{ fontSize: '11px', color: '#ef4444', fontWeight: 600 }}>
+                  {configErrorMsg}
+                </span>
+              )}
+            </div>
+
+            <div className="sim-controls-form">
+              <div className="sim-control-row">
+                <span>Fleet Size</span>
+                <div className="counter-controls">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setConfigFleetSize((prev) => Math.max(1, prev - 1))
+                    }
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min="1"
+                    max="1000"
+                    value={configFleetSize}
+                    onChange={(e) =>
+                      setConfigFleetSize(Math.max(1, Number(e.target.value)))
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setConfigFleetSize((prev) => prev + 1)
+                    }
+                  >
+                    +
+                  </button>
                 </div>
               </div>
-            </section>
-          );
-        })()}
+
+              <div className="sim-control-row">
+                <span>Interval (ms)</span>
+                <input
+                  type="number"
+                  min="500"
+                  max="10000"
+                  step="500"
+                  value={configInterval}
+                  onChange={(e) => setConfigInterval(Number(e.target.value))}
+                />
+              </div>
+
+              <div className="sim-control-row">
+                <span>Payload (bytes)</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="65536"
+                  step="64"
+                  value={configPayloadSize}
+                  onChange={(e) => setConfigPayloadSize(Number(e.target.value))}
+                />
+              </div>
+
+              <div className="sim-control-row">
+                <span>Admin Key</span>
+                <input
+                  type="password"
+                  placeholder="Enter admin key..."
+                  value={adminKey}
+                  onChange={(e) => setAdminKey(e.target.value)}
+                  style={{ width: '140px' }}
+                />
+              </div>
+
+              <button
+                className="apply-config-btn"
+                disabled={isSavingConfig}
+                onClick={handleSaveConfig}
+              >
+                {isSavingConfig ? 'Applying...' : 'Apply Config'}
+              </button>
+            </div>
+          </section>
+        </div>
+      </div>
     </div>
   );
 }

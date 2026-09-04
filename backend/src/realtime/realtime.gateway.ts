@@ -14,4 +14,8 @@ export class RealtimeGateway {
   broadcastRobotUpdate(robot: unknown): void {
     this.server.emit('robot:update', robot);
   }
+
+  broadcastFleetSync(robots: unknown): void {
+    this.server.emit('fleet:sync', robots);
+  }
 }

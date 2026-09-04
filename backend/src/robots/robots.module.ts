@@ -7,6 +7,7 @@ import { RealtimeModule } from 'src/realtime/realtime.module';
 @Module({
   imports: [RealtimeModule],
   controllers: [RobotsController],
-  providers: [RobotsService]
+  providers: [RobotsService],
+  exports: [RobotsService],
 })
 export class RobotsModule {}

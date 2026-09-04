@@ -1,7 +1,7 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { SimulatorService } from './simulator.service';
 import { SimulatorConfigDto } from './dto/simulator-config.dto';
-
+import { AdminAuthGuard } from './admin-auth.guard';
 
 @Controller('simulator')
 export class SimulatorController {
@@ -13,14 +13,15 @@ export class SimulatorController {
     }
 
     @Post('config')
+    @UseGuards(AdminAuthGuard)
     updateConfig(@Body() config: SimulatorConfigDto) {
         this.simulatorService.updateConfig(config);
 
         return this.simulatorService.getConfig();
     }
 
-
     @Post('start')
+    @UseGuards(AdminAuthGuard)
     start() {
         this.simulatorService.start();
 
@@ -28,6 +29,7 @@ export class SimulatorController {
     }
 
     @Post('stop')
+    @UseGuards(AdminAuthGuard)
     stop() {
         this.simulatorService.stop();
 
