@@ -1,5 +1,4 @@
-import { IsNumber, IsString, Max, Min, IsIn } from "class-validator";
-
+import { IsNumber, IsString, Max, Min, IsIn, IsOptional } from "class-validator";
 export class RobotUpdateDto {
     @IsString()
     robot_id: string;
@@ -21,4 +20,8 @@ export class RobotUpdateDto {
 
     @IsNumber()
     sequence: number;
+
+    @IsOptional()
+    @IsString()
+    payload?: string;
 }

@@ -40,7 +40,27 @@ export class RobotsService implements OnModuleInit {
     updateRobot(update: RobotUpdateDto): RobotState {
         const existing = this.robots.get(update.robot_id);
 
-        if (!existing) throw new Error(`Unknown robot: ${update.robot_id}`);
+        if (!existing) {
+            const robotNumber = parseInt(update.robot_id.replace('/\D/g', ''), 10) ||
+                                this.robots.size + 1;
+
+
+            const dynamicRobot: RobotState = {
+                robot_id: update.robot_id,
+                robot_type: robotNumber % 2 === 0 ? 'hauler' : 'picker',
+                x: update.x,
+                y: update.y,
+                battery: update.battery,
+                status: update.status as RobotState['status'],
+                lastSeen: Date.now(),
+                sequence: update.sequence,
+            };
+
+            this.robots.set(update.robot_id, dynamicRobot);
+            this.realtimeGateway.broadcastRobotUpdate(dynamicRobot);
+
+            return dynamicRobot;
+        }
 
         if (update.sequence <= existing.sequence) return existing;
 

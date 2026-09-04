@@ -3,10 +3,10 @@ import { SimulatedRobot } from './interfaces/simulated-robot.interface';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { RobotRoster } from 'src/robots/interfaces/robot-roster.interface';
-import { RouteInfoPathExtractor } from '@nestjs/core/middleware/route-info-path-extractor';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
-export class SimulatorService {
+export class SimulatorService implements OnModuleInit {
     private readonly robots = new Map<string, SimulatedRobot>();
 
     private readonly OBSTACLES = [
@@ -21,6 +21,18 @@ export class SimulatorService {
     private readonly SITE_WIDTH = 900;
     private readonly SITE_HEIGHT = 560;
     private readonly MOVE_STEP = 3;
+
+    private readonly fleetSize: number;
+    private readonly updateInterval: number;
+
+    constructor(private readonly configService: ConfigService) {
+        this.fleetSize = Number(
+            this.configService.get<number>('SIMULATOR_FLEET_SIZE', 8),
+        );
+        this.updateInterval = Number(
+            this.configService.get<number>('SIMULATOR_UPDATE_INTERVAL', 1000),
+        );
+    }
 
     onModuleInit(): void {
         this.loadRobots();
@@ -132,6 +144,15 @@ export class SimulatorService {
     }
 
 
+    private generatePayload(): string {
+        const payloadSize = Number(
+            this.configService.get<number>('SIMULATOR_PAYLOAD_SIZE', 0),
+        );
+
+        return 'x'.repeat(payloadSize);
+    }
+
+
 
     private async sendUpdates(): Promise<void> {
         const updates = Array.from(this.robots.values()).map((robot) => ({
@@ -140,7 +161,8 @@ export class SimulatorService {
             y: Number(robot.y.toFixed(2)),
             battery: Number(robot.battery.toFixed(2)),
             status: robot.status,
-            sequence: robot.sequence
+            sequence: robot.sequence,
+            payload: this.generatePayload(),
         }));
 
 
@@ -181,6 +203,38 @@ export class SimulatorService {
             });
         }
 
+
+
+        while(this.robots.size < this.fleetSize) {
+            const robotId = `r${this.robots.size + 1}`;
+
+            let x: number;
+            let y: number;
+
+            do {
+                x = Math.random() * this.SITE_WIDTH;
+                y = Math.random() * this.SITE_HEIGHT;
+            }
+            while( this.isInsideObstacle(x, y));
+
+
+            const robotType = this.robots.size % 2 === 0 ? 'picker' : 'hauler';
+
+            this.robots.set(robotId, {
+                robot_id: robotId,
+                robot_type: robotType,
+                x,
+                y,
+                battery: 100,
+                status: 'idle',
+                sequence: 0,
+                targetX: x,
+                targetY: y,
+            });
+        }
+
+
+
         console.log(`Simulator loaded ${this.robots.size} robots`);
     }
 
@@ -206,7 +260,7 @@ export class SimulatorService {
             }
 
             await this.sendUpdates();
-        }, 1000);
+        }, this.updateInterval);
     }
 
     stop(): void { 
