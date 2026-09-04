@@ -246,7 +246,9 @@ export class SimulatorService implements OnModuleInit {
 
 
         try {
-            await fetch('http://localhost:3000/robots/updates', {
+            const port = process.env.PORT || 3000;
+            const apiUrl = process.env.INTERNAL_API_URL || `http://127.0.0.1:${port}`;
+            await fetch(`${apiUrl}/robots/updates`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

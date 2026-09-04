@@ -33,7 +33,9 @@ const OBSTACLES = [
   { x: 650, y: 340, width: 200, height: 50 },
 ];
 
-function App() {
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+export function App() {
   const [robots, setRobots] = useState<Robot[]>([]);
   const [connected, setConnected] = useState(false);
   const [trend, setTrend] = useState<TrendPoint[]>([]);
@@ -53,7 +55,7 @@ function App() {
   const [configErrorMsg, setConfigErrorMsg] = useState('');
 
   useEffect(() => {
-    fetch('http://localhost:3000/robots')
+    fetch(`${API_URL}/robots`)
       .then((res) => res.json())
       .then((data: Robot[]) => {
         setRobots(data);
@@ -65,7 +67,7 @@ function App() {
       })
       .catch((err) => console.error('Failed to fetch initial robots:', err));
 
-    fetch('http://localhost:3000/simulator/config')
+    fetch(`${API_URL}/simulator/config`)
       .then((res) => res.json())
       .then((cfg) => {
         if (cfg.fleetSize !== undefined) setConfigFleetSize(cfg.fleetSize);
@@ -74,7 +76,7 @@ function App() {
       })
       .catch((err) => console.error('Failed to fetch simulator config:', err));
 
-    const socket = io('http://localhost:3000');
+    const socket = io(API_URL);
 
     socket.on('connect', () => {
       setConnected(true);
@@ -168,7 +170,7 @@ function App() {
     setConfigSavedMsg('');
     setConfigErrorMsg('');
     try {
-      const res = await fetch('http://localhost:3000/simulator/config', {
+      const res = await fetch(`${API_URL}/simulator/config`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -185,7 +187,7 @@ function App() {
         sessionStorage.setItem('fleet_admin_key', adminKey);
         setConfigSavedMsg('Config applied!');
         setTimeout(() => setConfigSavedMsg(''), 3000);
-        const robotsRes = await fetch('http://localhost:3000/robots');
+        const robotsRes = await fetch(`${API_URL}/robots`);
         const updatedRobots = await robotsRes.json();
         setRobots(updatedRobots);
       } else if (res.status === 401) {
