@@ -22,8 +22,11 @@ export class SimulatorService implements OnModuleInit {
     private readonly SITE_HEIGHT = 560;
     private readonly MOVE_STEP = 3;
 
-    private readonly fleetSize: number;
-    private readonly updateInterval: number;
+    private  fleetSize: number;
+    private updateInterval: number;
+    private payloadSize: number;
+
+    private timer?: NodeJS.Timeout;
 
     constructor(private readonly configService: ConfigService) {
         this.fleetSize = Number(
@@ -31,6 +34,9 @@ export class SimulatorService implements OnModuleInit {
         );
         this.updateInterval = Number(
             this.configService.get<number>('SIMULATOR_UPDATE_INTERVAL', 1000),
+        );
+        this.payloadSize = Number(
+            this.configService.get<number>('SIMULATOR_PAYLOAD_SIZE', 0),
         );
     }
 
@@ -144,12 +150,43 @@ export class SimulatorService implements OnModuleInit {
     }
 
 
+    updateConfig(config: {
+        fleetSize?: number;
+        updateInterval?: number;
+        payloadSize?: number;
+    }): void {
+        if(config.fleetSize !== undefined) {
+            this.fleetSize = config.fleetSize;
+        }
+
+        if(config.updateInterval !== undefined) {
+            this.updateInterval = config.updateInterval;
+        }
+
+        if(config.payloadSize !== undefined) {
+            this.payloadSize = config.payloadSize;
+        }
+
+        this.stop();
+        this.start();
+    }
+
+
     private generatePayload(): string {
         const payloadSize = Number(
             this.configService.get<number>('SIMULATOR_PAYLOAD_SIZE', 0),
         );
 
-        return 'x'.repeat(payloadSize);
+        return 'x'.repeat(this.payloadSize);
+    }
+
+
+    getConfig() {
+        return {
+            fleetSize: this.fleetSize,
+            updateInterval: this.updateInterval,
+            payloadSize: this.payloadSize,
+        };
     }
 
 
@@ -239,9 +276,11 @@ export class SimulatorService implements OnModuleInit {
     }
 
     start(): void {
+        if(this.timer) return;
+
         console.log('Simulator started');
 
-        setInterval(async () => {
+        this.timer = setInterval(async () => {
             for(const robot of this.robots.values()) {
                 this.updateStatus(robot);
                 this.updateBattery(robot);
@@ -264,6 +303,11 @@ export class SimulatorService implements OnModuleInit {
     }
 
     stop(): void { 
+        if(!this.timer) return;
+
+        clearInterval(this.timer);
+        this.timer = undefined;
+
         console.log('Simulator stopped');
     }
 
