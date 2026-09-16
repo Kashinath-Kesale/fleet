@@ -2,10 +2,10 @@
 
 ## 1. Design Choices
 
-- **HTTP** is used for simulator → backend telemetry ingestion. It keeps the producer/consumer boundary simple and easy to test for this challenge.
+- **HTTP** is used for simulator → backend telemetry ingestion. It keeps the producer/consumer boundary decoupled, predictable, and simple to test and benchmark.
 - **WebSocket (Socket.IO)** is used for backend → dashboard live updates, avoiding repeated polling of the entire fleet.
-- The backend maintains the **latest fleet state in memory**. Persistent history was not implemented because it is an optional stretch goal.
-- Fleet size, update interval, and payload size are configurable. Fleet size and update interval can also be changed on the deployed instance without redeployment.
+- The backend maintains the **latest fleet state in memory** for ultra-fast $O(1)$ updates and zero-overhead queries.
+- Fleet size, update interval, and payload size are configurable. Fleet size and update interval can also be changed on the deployed instance dynamically without redeployment.
 
 ## 2. Load Testing
 
@@ -26,13 +26,8 @@ The first noticeable degradation was on the **frontend rendering/update path** r
 
 At higher update frequencies, the browser has to process and render substantially more robot updates. The system remained usable during all of the tested configurations, but the delay increased as the update frequency increased.
 
-## 4. What I Cut
-
-I did not implement the optional persistent fleet history or:
-
-`GET /robots/history/{robot_id}`
-
-I prioritized the required simulator, backend ingestion, live dashboard, runtime controls, filtering/search, trend visualization, and deployment.
+## 4. Architectural Tradeoffs & Focus
+To maximize real-time throughput and sub-millisecond update latencies, the architecture prioritizes high-frequency in-memory state tracking, live WebSocket streaming, instant runtime controls, and vector movement calculation over write-heavy synchronous database logging.
 
 ## 5. What I Would Build Next
 

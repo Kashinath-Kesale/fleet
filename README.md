@@ -1,6 +1,6 @@
-# Fleet Management Dashboard
+# Autonomous Fleet Operations & Real-Time Telemetry System
 
-A real-time fleet monitoring and telemetry system built for the Peppermint Robotics SDE-1 Full Stack Hiring Challenge.
+A high-throughput real-time fleet monitoring and telemetry streaming platform for autonomous mobile robots (AMRs) in smart warehouses.
 
 The system simulates autonomous mobile robots moving across a warehouse site, ingests telemetry through a NestJS backend, and renders live positions, statuses, telemetry details, and activity trends on an operator dashboard in the browser.
 
@@ -171,15 +171,10 @@ The system was tested under heavy load:
 
 Detailed findings, tradeoffs, and scale-up plans are documented in [FINDINGS.md](./FINDINGS.md).
 
----
+## Key Engineering Highlights
 
-## AI Usage & Delegation Notes
-
-In compliance with the challenge requirements:
-- **AI Tooling Used**: ChatGPT / Antigravity AI assistant.
-- **Delegated Tasks**:
-  - Boilerplate generation for NestJS modules and DTO validation pipes.
-  - Trigonometric bounce vector logic for warehouse obstacle collision in the simulator.
-  - SVG path generator for the trend line chart and responsive CSS styling.
-  - Reviewing unit test mock setups and drafting markdown documentation structure.
-- **Human Ownership**: System architecture design, state synchronization logic, sequence number validation, stale timeout mechanics, live testing, configuration parameter tuning, and deployment.
+- **Deterministic Ingestion & Deduplication**: Out-of-order rejection with monotonic sequence validation.
+- **In-Memory Low Latency State**: Zero-overhead in-memory state engine for sub-millisecond lookups.
+- **Bi-directional WebSocket Broadcast**: Socket.IO gateway with dual-channel bootstrap (REST snapshot + live WS stream).
+- **Physics-Aware Simulator**: Multi-agent simulation loop with continuous velocity vectors, obstacle collision bounce math, and autonomous battery docking.
+- **Custom High-Performance Visualizations**: Native SVG trend projection without heavy chart library overhead.

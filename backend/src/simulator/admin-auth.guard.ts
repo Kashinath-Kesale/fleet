@@ -14,7 +14,7 @@ export class AdminAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const adminKey = this.configService.get<string>(
       'ADMIN_API_KEY',
-      'peppermint-secret-2026',
+      'fleet-admin-secret-2026',
     );
 
     const authHeader = request.headers['authorization'];
