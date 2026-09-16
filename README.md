@@ -91,7 +91,7 @@ The system was stress-tested across varying fleet sizes and update frequencies:
 | `SIMULATOR_FLEET_SIZE` | Initial number of simulated robots | `8` |
 | `SIMULATOR_UPDATE_INTERVAL` | Milliseconds between telemetry cycles | `1000` |
 | `SIMULATOR_PAYLOAD_SIZE` | Size of extra dummy payload in bytes | `0` |
-| `ADMIN_API_KEY` | Secret key protecting runtime config updates | `fleet-admin-secret-2026` |
+| `ADMIN_API_KEY` | Secret key protecting runtime config updates | *Configured in .env* |
 
 #### Frontend (`frontend/.env`):
 | Variable | Description | Default |
@@ -107,7 +107,7 @@ You can update simulator parameters on the fly without restarting the server:
 ```bash
 curl -X POST https://fleet-5kvg.onrender.com/simulator/config \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer fleet-admin-secret-2026" \
+  -H "Authorization: Bearer <YOUR_ADMIN_API_KEY>" \
   -d '{"fleetSize": 100, "updateInterval": 1000, "payloadSize": 0}'
 ```
 
